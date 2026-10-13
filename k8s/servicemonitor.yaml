@@ -1,0 +1,12 @@
+# TÙY CHỌN: chỉ dùng nếu cluster chạy Prometheus Operator. Nếu Prometheus thu
+# bằng annotation (đã có trong serving.yaml) thì bỏ file này.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: skelty-serving
+  namespace: argo
+spec:
+  selector:
+    matchLabels: {app: skelty-serving}
+  endpoints:
+    - {port: http, path: /metrics, interval: 30s}
