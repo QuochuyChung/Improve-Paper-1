@@ -1,0 +1,61 @@
+# GHI CHÚ: PVC skelty-artifacts là ReadWriteOnce, nên pod serving và các pod Argo
+# (pipeline, orchestrator, drift CronJob) phải nằm CÙNG MỘT NODE. Nếu pod Pending
+# vì volume, kiểm tra node hoặc thêm nodeSelector/podAffinity cho cùng node.
+# Chưa kiểm chứng trên cluster thật.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: skelty-serving
+  namespace: argo
+  labels: {app: skelty-serving}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: skelty-serving}
+  template:
+    metadata:
+      labels: {app: skelty-serving}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: /metrics
+    spec:
+      containers:
+        - name: serving
+          image: skelty-serving:0.1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - {name: http, containerPort: 8000}
+          env:
+            - {name: ARTIFACT_ROOT, value: /data}
+            - {name: STATS_WINDOW, value: "200"}
+          readinessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: {path: /docs, port: http}
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {memory: 512Mi}
+          volumeMounts:
+            - {name: artifacts, mountPath: /data, readOnly: true}
+      volumes:
+        - name: artifacts
+          persistentVolumeClaim:
+            claimName: skelty-artifacts
+            readOnly: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: skelty-serving
+  namespace: argo
+  labels: {app: skelty-serving}
+spec:
+  type: ClusterIP
+  selector: {app: skelty-serving}
+  ports:
+    - {name: http, port: 8000, targetPort: http}
