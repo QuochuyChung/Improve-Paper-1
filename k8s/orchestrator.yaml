@@ -1,0 +1,94 @@
+# PVC skelty-artifacts là ReadWriteOnce. Pod này, serving, monitoring và các pod
+# Argo phải được schedule cùng node giữ volume. Nếu cluster nhiều node, thêm
+# nodeSelector/podAffinity phù hợp với cách provision PVC của homelab.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: skelty-orchestrator
+  namespace: argo
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: skelty-orchestrator
+  namespace: argo
+rules:
+  - apiGroups: ["argoproj.io"]
+    resources: ["workflows"]
+    verbs: ["create", "get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: skelty-orchestrator
+  namespace: argo
+subjects:
+  - kind: ServiceAccount
+    name: skelty-orchestrator
+    namespace: argo
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: skelty-orchestrator
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: skelty-orchestrator
+  namespace: argo
+  labels:
+    app: skelty-orchestrator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: skelty-orchestrator
+  template:
+    metadata:
+      labels:
+        app: skelty-orchestrator
+    spec:
+      serviceAccountName: skelty-orchestrator
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 65532
+      containers:
+        - name: orchestrator
+          image: skelty-orchestrator:0.1
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: skelty-github
+                  key: GITHUB_TOKEN
+            - name: GITHUB_REPO
+              valueFrom:
+                secretKeyRef:
+                  name: skelty-github
+                  key: GITHUB_REPO
+            - {name: ARGO_NAMESPACE, value: argo}
+            - {name: ARTIFACT_ROOT, value: /data}
+            - {name: SERVING_URL, value: "http://skelty-serving:8000"}
+            - {name: POLL_SECONDS, value: "30"}
+            - {name: WORKFLOW_POLL_SECONDS, value: "5"}
+            - {name: WORKFLOW_TIMEOUT_SECONDS, value: "900"}
+            - {name: DEFAULT_SHIFT, value: "1.5"}
+            - {name: PIPELINE_IMAGE, value: "skelty-poc:0.1"}
+          resources:
+            requests: {cpu: 25m, memory: 96Mi}
+            limits: {cpu: 250m, memory: 256Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: artifacts
+              mountPath: /data
+              readOnly: true
+      volumes:
+        - name: artifacts
+          persistentVolumeClaim:
+            claimName: skelty-artifacts
+            readOnly: true
