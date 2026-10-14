@@ -1,0 +1,17 @@
+# PVC dùng chung cho mọi pod của PoC (pipeline, serving, drift, orchestrator).
+# Khớp PV tĩnh k8s/pv-skelty-artifacts.yaml (NFS 192.168.58.24:/data/skelty-artifacts):
+# cụm không có provisioner động, nên storageClassName và volumeName phải đúng như dưới.
+# Apply PV trước, rồi mới apply file này.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: skelty-artifacts
+  namespace: argo
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: nfs-storage
+  volumeName: skelty-artifacts-pv
+  resources:
+    requests:
+      storage: 2Gi

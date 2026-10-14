@@ -1,0 +1,26 @@
+# PV tĩnh cho PVC skelty-artifacts (namespace argo).
+# Cụm không có provisioner động (StorageClass nfs-storage là no-provisioner), nên PV phải tạo tay.
+# NFS server: deploy-server (192.168.58.24), export /data (rw, no_root_squash).
+# Thư mục /data/skelty-artifacts phải tồn tại sẵn trên NFS server, chmod 777.
+# claimRef khoá PV này cho đúng PVC skelty-artifacts, tránh PVC khác chiếm mất.
+# Yêu cầu: PVC skelty-artifacts phải có storageClassName: nfs-storage và accessModes ReadWriteOnce.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: skelty-artifacts-pv
+spec:
+  capacity:
+    storage: 2Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: nfs-storage
+  volumeMode: Filesystem
+  claimRef:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    name: skelty-artifacts
+    namespace: argo
+  nfs:
+    server: 192.168.58.24
+    path: /data/skelty-artifacts
