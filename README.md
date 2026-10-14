@@ -1,6 +1,7 @@
 # Improve-Paper-1: PoC SkeltyMLOps
 
-Chia việc xem `task.md`. Tài liệu này mô tả phần của Người B: **Phần 2 (serving API)** và **Phần 5 (kịch bản end-to-end)**.
+Chia việc xem `task.md`. Repo hiện có **Phần 2 (serving API)**, **Phần 4
+(orchestrator)** và **Phần 5 (kịch bản end-to-end)**.
 
 > Repo hiện chưa có `pipeline/`, `Dockerfile` gốc và `k8s/pvc.yaml`, `k8s/workflow-template.yaml` của `skelty-poc`; các phần này do nhóm đẩy lên sau. Test dùng `serving/tests/fake_pipeline.py` để sinh artifact đúng quy ước chung.
 
@@ -51,6 +52,55 @@ Cần `argo` và `kubectl` trong PATH, orchestrator chạy với `DEFAULT_SHIFT=
 
 Test: `python -m pytest scenario/tests` (dịch vụ giả, xem docstring trong file).
 
+## Phần 4: orchestrator (`skelty-orchestrator:0.1`)
+
+Luồng xử lý:
+
+```text
+GitHub Issue [drift] + retrain
+  -> thêm in-progress
+  -> tạo/đọc Workflow retrain-issue-<số> từ WorkflowTemplate
+  -> chờ Argo kết thúc
+  -> đọc metrics.json -> POST /reload
+  -> comment kết quả -> done -> đóng issue
+```
+
+Workflow có tên xác định theo issue nên việc gọi lại hoặc restart không tạo bản sao.
+Issue đã có label `in-progress` vẫn được đọc lại để tiếp tục workflow đang tồn tại.
+Issue lỗi JSON được comment và bỏ qua; workflow lỗi/timeout được comment, bỏ
+`in-progress` và giữ issue mở.
+
+Build, test và deploy:
+
+```bash
+docker build -f orchestrator/Dockerfile -t skelty-orchestrator:0.1 .
+pip install -r orchestrator/requirements-dev.txt
+python -m pytest orchestrator/tests
+kubectl apply -f k8s/orchestrator.yaml
+kubectl -n argo logs -f deploy/skelty-orchestrator
+```
+
+Manifest đọc `GITHUB_TOKEN` và `GITHUB_REPO` từ Secret `skelty-github`. Tạo
+Secret mà không ghi token vào file hay lịch sử Git:
+
+```bash
+kubectl -n argo create secret generic skelty-github \
+  --from-literal=GITHUB_TOKEN='<token>' \
+  --from-literal=GITHUB_REPO='<owner>/<repo>'
+```
+
+Biến cấu hình: `ARGO_NAMESPACE` (mặc định `argo`), `SERVING_URL`,
+`ARTIFACT_ROOT`, `POLL_SECONDS`, `WORKFLOW_POLL_SECONDS`,
+`WORKFLOW_TIMEOUT_SECONDS`, `DEFAULT_SHIFT` và `PIPELINE_IMAGE`. Với kịch bản
+E2E dùng `DEFAULT_SHIFT=1.5`.
+
+ServiceAccount chỉ có quyền `create`, `get`, `list` resource `workflows` trong
+namespace `argo`. PVC `skelty-artifacts` là ReadWriteOnce, vì vậy orchestrator,
+serving, monitoring và các pod Argo phải cùng node.
+
 ## Chưa kiểm chứng
 
-Chưa chạy trên cluster, chưa build Docker image, chưa thử `k8s/*.yaml` bằng `kubectl apply` (chỉ kiểm tra cú pháp YAML), chưa chạy kịch bản với GitHub, Argo, CronJob và orchestrator thật.
+Chưa chạy trên cluster, chưa build Docker image, chưa thử `k8s/*.yaml` bằng
+`kubectl apply`, chưa gọi GitHub thật và chưa chạy kịch bản với Argo, CronJob và
+orchestrator thật. Trạng thái tích hợp báo cáo SWD391-19 nằm tại
+`report/INTEGRATION_STATUS.md`; repo còn thiếu source LaTeX và hai section đầu vào.
