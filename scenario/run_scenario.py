@@ -299,7 +299,7 @@ def main(argv=None, env=None) -> int:
     log_dir = Path(args.log_dir)
     log_dir.mkdir(parents=True, exist_ok=True)
     path = log_dir / f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.md"
-    path.write_text(render(results, meta))
+    path.write_text(render(results, meta), encoding="utf-8")
     print(f"\nĐã ghi log: {path}")
     return 0 if all(r.ok for r in results) else 1
 

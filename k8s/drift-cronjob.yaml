@@ -1,0 +1,65 @@
+# CronJob phát hiện drift: mỗi 5 phút hỏi API /stats, so với reference_stats.json,
+# có drift và chưa có issue `retrain` đang mở thì tạo issue [drift].
+# Image skelty-monitor:0.1 phải có trên node (không có registry: docker save, ctr images import).
+# Secret skelty-github (GITHUB_TOKEN, GITHUB_REPO) phải tồn tại trong namespace argo.
+# PVC skelty-artifacts mount chế độ chỉ đọc (đọc features/<run-id>/reference_stats.json).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: skelty-drift-check
+  namespace: argo
+  labels:
+    app: skelty-drift-check
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 120
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 120
+      template:
+        metadata:
+          labels:
+            app: skelty-drift-check
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+          containers:
+            - name: drift-check
+              image: skelty-monitor:0.1
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: GITHUB_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: skelty-github
+                      key: GITHUB_TOKEN
+                - name: GITHUB_REPO
+                  valueFrom:
+                    secretKeyRef:
+                      name: skelty-github
+                      key: GITHUB_REPO
+                - {name: SERVING_URL, value: "http://skelty-serving:8000"}
+                - {name: ARTIFACT_ROOT, value: /data}
+                - {name: PUSHGATEWAY_URL, value: "http://prometheus-pushgateway.monitoring-namespace:9091"}
+              resources:
+                requests: {cpu: 10m, memory: 32Mi}
+                limits: {cpu: 100m, memory: 128Mi}
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+                readOnlyRootFilesystem: true
+              volumeMounts:
+                - name: artifacts
+                  mountPath: /data
+                  readOnly: true
+          volumes:
+            - name: artifacts
+              persistentVolumeClaim:
+                claimName: skelty-artifacts
+                readOnly: true

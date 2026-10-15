@@ -1,0 +1,101 @@
+{
+  "uid": "skelty-poc",
+  "title": "SkeltyMLOps PoC",
+  "tags": ["skelty", "mlops", "poc"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": {"from": "now-6h", "to": "now"},
+  "templating": {
+    "list": [
+      {"name": "DS", "label": "Prometheus", "type": "datasource", "query": "prometheus", "current": {}, "hide": 0, "refresh": 1}
+    ]
+  },
+  "panels": [
+    {
+      "id": 1, "type": "stat", "title": "Model đang phục vụ",
+      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "${DS}"},
+      "targets": [{"refId": "A", "expr": "model_version_info", "legendFormat": "{{model_version}}", "instant": true}],
+      "options": {"textMode": "name", "colorMode": "value", "graphMode": "none", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}},
+      "fieldConfig": {"defaults": {"color": {"mode": "fixed", "fixedColor": "blue"}}, "overrides": []}
+    },
+    {
+      "id": 2, "type": "stat", "title": "Có drift?",
+      "description": "Metric drift_detected do CronJob skelty-drift-check đẩy lên Pushgateway (0 = không, 1 = có).",
+      "gridPos": {"h": 5, "w": 6, "x": 6, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "${DS}"},
+      "targets": [{"refId": "A", "expr": "max(drift_detected)", "instant": true}],
+      "options": {"textMode": "value", "colorMode": "background", "graphMode": "none", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}},
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [{"type": "value", "options": {"0": {"text": "Không", "color": "green"}, "1": {"text": "CÓ", "color": "red"}}}],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3, "type": "stat", "title": "Tổng số dự đoán",
+      "gridPos": {"h": 5, "w": 6, "x": 12, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "${DS}"},
+      "targets": [{"refId": "A", "expr": "sum(predictions_total)", "instant": true}],
+      "options": {"textMode": "value", "colorMode": "none", "graphMode": "area", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []}
+    },
+    {
+      "id": 4, "type": "stat", "title": "Số feature lệch (hiện tại)",
+      "gridPos": {"h": 5, "w": 6, "x": 18, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "${DS}"},
+      "targets": [{"refId": "A", "expr": "max(drifted_feature_count)", "instant": true}],
+      "options": {"textMode": "value", "colorMode": "value", "graphMode": "none", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}},
+      "fieldConfig": {"defaults": {"thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 1}, {"color": "red", "value": 3}]}}, "overrides": []}
+    },
+    {
+      "id": 5, "type": "timeseries", "title": "Số dự đoán mỗi giây theo model",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 5},
+      "datasource": {"type": "prometheus", "uid": "${DS}"},
+      "targets": [{"refId": "A", "expr": "sum by (model_version) (rate(predictions_total[1m]))", "legendFormat": "{{model_version}}"}],
+      "fieldConfig": {"defaults": {"unit": "reqps", "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 10}}, "overrides": []}
+    },
+    {
+      "id": 6, "type": "timeseries", "title": "Độ trễ /predict (p50, p95)",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 5},
+      "datasource": {"type": "prometheus", "uid": "${DS}"},
+      "targets": [
+        {"refId": "A", "expr": "histogram_quantile(0.50, sum by (le) (rate(prediction_latency_seconds_bucket[5m])))", "legendFormat": "p50"},
+        {"refId": "B", "expr": "histogram_quantile(0.95, sum by (le) (rate(prediction_latency_seconds_bucket[5m])))", "legendFormat": "p95"}
+      ],
+      "fieldConfig": {"defaults": {"unit": "s", "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 10}}, "overrides": []}
+    },
+    {
+      "id": 7, "type": "timeseries", "title": "z lớn nhất của các feature (ngưỡng drift = 1.0)",
+      "description": "max_feature_zscore: |mean hiện tại - mean tham chiếu| / std tham chiếu, lớn nhất trong các feature.",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 13},
+      "datasource": {"type": "prometheus", "uid": "${DS}"},
+      "targets": [{"refId": "A", "expr": "max(max_feature_zscore)", "legendFormat": "z lớn nhất"}],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "thresholdsStyle": {"mode": "line"}},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 8, "type": "timeseries", "title": "Số feature vượt ngưỡng (cần >= 3 để báo drift)",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 13},
+      "datasource": {"type": "prometheus", "uid": "${DS}"},
+      "targets": [{"refId": "A", "expr": "max(drifted_feature_count)", "legendFormat": "số feature lệch"}],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 10, "thresholdsStyle": {"mode": "line"}},
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 3}]},
+          "min": 0, "max": 6
+        },
+        "overrides": []
+      }
+    }
+  ]
+}

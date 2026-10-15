@@ -94,7 +94,7 @@ def test_main_writes_log_with_summary_table(tmp_path, monkeypatch):
     (tmp_path / "art").mkdir()
     code = rs.main(["--log-dir", str(tmp_path / "logs")], env=env)
     assert code == 1
-    log = next((tmp_path / "logs").glob("*.md")).read_text()
+    log = next((tmp_path / "logs").glob("*.md")).read_text(encoding="utf-8")
     assert "| Bước | Kỳ vọng | Thực tế | Kết quả |" in log
     assert "| 4 |" in log and "không đạt" in log
 
