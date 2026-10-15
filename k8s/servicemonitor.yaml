@@ -5,6 +5,10 @@ kind: ServiceMonitor
 metadata:
   name: skelty-serving
   namespace: argo
+  labels:
+    # Prometheus của cụm (kube-prometheus-stack, release huydevops) chỉ chọn
+    # ServiceMonitor có label này; thiếu thì metric không được thu.
+    release: huydevops
 spec:
   selector:
     matchLabels: {app: skelty-serving}
