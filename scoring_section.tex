@@ -1,0 +1,126 @@
+% =====================================================================
+% scoring_section.tex  --  Scoring four MLOps architectures on six criteria (Person A)
+% Insert into the main report with:  \input{scoring_section}
+% Required packages in the preamble: booktabs, longtable, array
+% Source: Daoud et al., Future Generation Computer Systems 185 (2026) 108700.
+% This is the group's own assessment, not the assessment of the paper's authors.
+% =====================================================================
+
+% Verbatim quotation from the paper: italic, inside quotation marks.
+\providecommand{\ev}[1]{\textit{``#1''}}
+
+% Reference to the paper under study. The group's main report also has its own Table 7,
+% so tables of the paper are always written "Table N of [1]".
+% Person C: replace the definition below with \cite{<bib key of Daoud et al. 2026>} if needed.
+\providecommand{\papercite}{[1]}
+\providecommand{\paperTab}[1]{Table~#1 of~\papercite}
+
+\section{Scoring Four MLOps Architectures on Six Criteria}
+\label{sec:scoring}
+
+\subsection{Purpose and Scoring Method}
+
+Daoud et al.~\papercite{} score five baseline architectures against a framework of 44 elements (\paperTab{7} and Table~8), but they do not score SkeltyMLOps itself. This section is the group's addition: we score SkeltyMLOps together with three other architectures, namely Wo\'{z}niak et al., Najafabadi et al.\ and Kreuzberger et al., on the six criteria below. \textbf{This is the group's own assessment, not the assessment of the paper's authors.}
+
+The scale has three levels: \emph{Yes}, \emph{Partial} and \emph{Not enough evidence} (abbreviated NEE). The following rules apply:
+
+\begin{itemize}
+  \item Only the content of the paper by Daoud et al.\ is used. Every cell has a reference (section, table or figure) and a verbatim quotation in Table~\ref{tab:scoring-evidence}.
+  \item \textbf{SkeltyMLOps:} every cell is a \emph{claim} (the paper says the capability exists). No cell is \emph{verified}, because the paper states that the architecture has not been instantiated or validated in a production setting.
+  \item \textbf{The other three architectures:} scores are taken from \paperTab{7} with the mapping $\bullet \rightarrow$ Yes, $\circ \rightarrow$ Partial, $- \rightarrow$ NEE. These are the scores assigned by Daoud et al.; the group has not cross-checked them against the original papers of Najafabadi et al.\ and Kreuzberger et al. The symbol $-$ (absent) in the paper means that the capability cannot be established from the text without speculation, so it is mapped to NEE and not to ``definitely absent''.
+  \item The six criteria were proposed by the group and do not exist in the paper as such, so they are mapped onto rows of \paperTab{7}. Criteria 3 and 5 have only approximate rows (proxies, marked $^{\dagger}$) and are therefore capped at Partial. Criterion 4 combines several rows: Yes if all related rows are $\bullet$, NEE if all are $-$, and Partial otherwise.
+  \item \textbf{Wo\'{z}niak et al.} have no column in Tables~7 and~8 of~\papercite{} (the paper lists them only in its Table~1 as a secondary study of the systematic-review type), so all six of their cells are NEE.
+\end{itemize}
+
+\subsection{Summary of Results}
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Scores of the four architectures on the six criteria (group assessment). SkeltyMLOps cells are claimed scores. $^{\dagger}$: the Table~7 row is only a proxy for the criterion, so the score is capped at Partial.}
+\label{tab:scoring-summary}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{3.9cm} >{\centering\arraybackslash}p{2.5cm} >{\centering\arraybackslash}p{2.2cm} >{\centering\arraybackslash}p{2.2cm} >{\centering\arraybackslash}p{2.3cm}@{}}
+\toprule
+Criterion & SkeltyMLOps (claimed) & Wo\'{z}niak et al. & Najafabadi et al. & Kreuzberger et al. \\
+\midrule
+1. Has a data management component & Yes & NEE & Yes & Yes \\
+2. Actors and responsibilities are clearly defined & Yes & NEE & NEE & Partial \\
+3. Orchestrator is drawn and explicitly described & Yes & NEE & Partial$^{\dagger}$ & Partial$^{\dagger}$ \\
+4. Full versioning (raw data, train/test sets, features, models, code) & Partial & NEE & Partial & Partial \\
+5. Monitoring covers model performance, data drift, resources and infrastructure & Partial & NEE & Partial$^{\dagger}$ & Partial$^{\dagger}$ \\
+6. Feedback loop triggers retraining & Yes & NEE & Yes & Yes \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+One remark about the paper itself: the conclusion states that ``a coverage-based evaluation is reported that compares SkeltyMLOps with a set of MLOps architectures from the literature'' (Section~7), but Tables~7 and~8 of~\papercite{} contain only the five baselines and no column or row for SkeltyMLOps. Hence there is no score for SkeltyMLOps published by the paper itself to compare against.
+
+\subsection{Detailed Evidence for Each Cell}
+
+Table~\ref{tab:scoring-evidence} lists the basis and a verbatim quotation (in English, exactly as in the paper) for every cell of Table~\ref{tab:scoring-summary}. For Najafabadi et al.\ and Kreuzberger et al., the quotation is either the activity description in Table~6 or a remark in Section~5.4, while the score comes from the symbol in Table~7.
+
+{\small
+\setlength{\tabcolsep}{4pt}
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{2.4cm} >{\raggedright\arraybackslash}p{1.8cm} >{\raggedright\arraybackslash}p{4.1cm} >{\raggedright\arraybackslash}p{5.4cm}@{}}
+\caption{Basis and quotations for each scored cell. Table and figure numbers refer to the paper~\papercite{}. Symbols in its Table~7: $\bullet$ = explicit, $\circ$ = partial, $-$ = absent.}
+\label{tab:scoring-evidence}\\
+\toprule
+Architecture & Score & Basis in the paper & Verbatim quotation \\
+\midrule
+\endfirsthead
+\toprule
+Architecture & Score & Basis in the paper & Verbatim quotation \\
+\midrule
+\endhead
+\midrule
+\multicolumn{4}{r}{\footnotesize Continued on next page}\\
+\endfoot
+\bottomrule
+\endlastfoot
+
+\multicolumn{4}{@{}p{14.5cm}@{}}{\textbf{Criterion 1: Has a data management component}}\\
+SkeltyMLOps & Yes (claimed) & Section~5.7 and Fig.~6 (Data Acquisition; Data Processing \& Feature Engineering; Data Storage \& Versioning; Feature Storage \& Versioning); Table~9 lists only the first two of these components & \ev{Data Acquisition ingests data from external sources; Data Processing \& Feature Engineering transforms raw data into datasets and features} \\
+Wo\'{z}niak et al. & NEE & No column in Table~7--8 (Section~5.4); mentioned only in Table~1 and Section~2 & \ev{Wozniak et al. [29] review MLOps components, tools, and process steps.} \\
+Najafabadi et al. & Yes & Table~7, row D8 Manage Data for [28] $=\bullet$; activity description in Table~6 & \ev{Version, catalog, and govern datasets and features.} \\
+Kreuzberger et al. & Yes & Table~7, row D8 Manage Data for [13] $=\bullet$; activity description in Table~6 & \ev{Version, catalog, and govern datasets and features.} \\
+\midrule
+
+\multicolumn{4}{@{}p{14.5cm}@{}}{\textbf{Criterion 2: Actors and responsibilities are clearly defined}}\\
+SkeltyMLOps & Yes (claimed) & Table~5 (leading actor of each dimension); Fig.~5; Section~5.10 (quotation); Section~5.8 also states that a handoff specifies the producer and consumer actor & \ev{Each coordination contract specifies which actor is responsible for each transition.} \\
+Wo\'{z}niak et al. & NEE & Table~1, column Act.\ $=-$; not in Table~7--8 & \ev{– = not addressed} \\
+Najafabadi et al. & NEE & Table~7, capability (i) Explicit Actor-to-Responsibility Mapping for [28] $=-$; Section~5.4 & \ev{cross-cutting coordination mechanisms such as governance gates, explicit ownership mapping, and software versioning} \\
+Kreuzberger et al. & Partial & Table~7, capability (i) for [13] $=\circ$; definition of the Partial level in Section~5.2 & \ev{the element is mentioned or implied, but the architecture does not specify a concrete mechanism, such as a named module, a process activity, or actor ownership} \\
+\midrule
+
+\multicolumn{4}{@{}p{14.5cm}@{}}{\textbf{Criterion 3: Orchestrator is drawn and explicitly described}}\\
+SkeltyMLOps & Yes (claimed) & Fig.~6 (MLOps Process Orchestration component); Table~9 (Execute Pipelines, Trigger Retraining); Section~5.8 & \ev{The MLOps Process Orchestration (MPO) executes these contracts. It dispatches work, manages handoffs between actors, and records execution evidence.} \\
+Wo\'{z}niak et al. & NEE & No column in Table~7--8; mentioned only in Table~1 and Section~2 & \ev{Wozniak et al. [29] review MLOps components, tools, and process steps.} \\
+Najafabadi et al. & Partial$^{\dagger}$ & Proxy: Table~7, row O3 Execute Pipelines for [28] $=\circ$. The paper does not say whether this architecture draws an orchestrator & \ev{Run orchestrated workflows on schedule/trigger.} \\
+Kreuzberger et al. & Partial$^{\dagger}$ & Proxy: Table~7, row O3 Execute Pipelines for [13] $=\bullet$, but a proxy is capped at Partial & \ev{Run orchestrated workflows on schedule/trigger.} \\
+\midrule
+
+\multicolumn{4}{@{}p{14.5cm}@{}}{\textbf{Criterion 4: Full versioning (raw data, train/test sets, features, models, code)}}\\
+SkeltyMLOps & Partial (claimed) & Fig.~6 and Section~5.7: Data, Feature, Model and Code Storage \& Versioning exist. The paper does not mention train/test sets separately, and says versioning ``should support'' (an intention) & \ev{Model Storage \& Versioning stores trained models and their versions together with associated evaluation evidence.} \\
+Wo\'{z}niak et al. & NEE & No column in Table~7--8 & \ev{Wozniak et al. [29] review MLOps components, tools, and process steps.} \\
+Najafabadi et al. & Partial & Table~7 for [28]: D8 $=\bullet$, M9 Register Model $=\bullet$, P7 Initialize Repositories $=\circ$, Software versioning $=-$ & \ev{cross-cutting coordination mechanisms such as governance gates, explicit ownership mapping, and software versioning} \\
+Kreuzberger et al. & Partial & Table~7 for [13]: D8 $=\bullet$, M9 $=\bullet$, P7 $=\circ$, Software versioning $=\circ$ & \ev{multiple elements remain conceptual rather than operationalized through explicit modules or mechanisms} \\
+\midrule
+
+\multicolumn{4}{@{}p{14.5cm}@{}}{\textbf{Criterion 5: Monitoring covers model performance, data drift, resources and infrastructure}}\\
+SkeltyMLOps & Partial (claimed) & Section~5.7 (Operations module); Table~9 (Monitor Performance, Manage Infrastructure). Degradation and drift are mentioned, but resource and infrastructure monitoring is not stated explicitly & \ev{This module emits runtime events (e.g., degradation events, drift indicators, anomalies) that may trigger contract-driven responses.} \\
+Wo\'{z}niak et al. & NEE & No column in Table~7--8 & \ev{Wozniak et al. [29] review MLOps components, tools, and process steps.} \\
+Najafabadi et al. & Partial$^{\dagger}$ & Proxy: Table~7 for [28], row O7 Monitor Performance $=\bullet$, O2 Manage Infrastructure $=\circ$. Table~7 does not separate performance, drift and resources & \ev{Track metrics, drift, and alerts in production.} \\
+Kreuzberger et al. & Partial$^{\dagger}$ & Proxy: Table~7 for [13], row O7 $=\bullet$, O2 $=\bullet$; still only a proxy, so capped at Partial & \ev{Track metrics, drift, and alerts in production.} \\
+\midrule
+
+\multicolumn{4}{@{}p{14.5cm}@{}}{\textbf{Criterion 6: Feedback loop triggers retraining}}\\
+SkeltyMLOps & Yes (claimed) & Section~5.9; Fig.~7; Table~9 (MPO: Trigger Retraining). Illustrated by a single scenario only, not measured & \ev{The process begins when the Deployment \& Monitoring component in the Ops module detects a data-drift event and raises a ticket to the Plan module} \\
+Wo\'{z}niak et al. & NEE & No column in Table~7--8 & \ev{Wozniak et al. [29] review MLOps components, tools, and process steps.} \\
+Najafabadi et al. & Yes & Table~7 for [28]: capability (v) Feedback Loops $=\bullet$, row O8 Trigger Retraining $=\bullet$ & \ev{Start retraining based on signals or new data.} \\
+Kreuzberger et al. & Yes & Table~7 for [13]: capability (v) Feedback Loops $=\bullet$, row O8 Trigger Retraining $=\bullet$ & \ev{Start retraining based on signals or new data.} \\
+\end{longtable}
+}
+
+\subsection{Critical Remarks}
+
+These criteria follow the 44-element framework that the authors built in Phase 1, so SkeltyMLOps was designed to satisfy them; its advantage on the coordination, orchestrator and feedback-loop criteria is therefore expected and is not independent evidence. The scores of the other three architectures were assigned by two of the paper's four authors (weighted Cohen's $\kappa_w = 0.743$ before consensus, Section~5.2) and not taken from the original papers, and Wo\'{z}niak et al.\ have no data. Every SkeltyMLOps cell is a claim: the paper states that the architecture has not been instantiated or validated in a production setting, and Section~5.9 is only an illustrative scenario. Moreover, Tables~7 and~8 of~\papercite{} contain no scores for SkeltyMLOps, even though the conclusion mentions such a comparison.

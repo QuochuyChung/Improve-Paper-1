@@ -1,0 +1,185 @@
+% =====================================================================
+% poc_section.tex  --  Proof of Concept of a scaled-down SkeltyMLOps (Person A, Part 6)
+% Insert into the main report with:  \input{poc_section}
+% Required packages in the preamble: booktabs, longtable, array, tikz
+% Required TikZ libraries: positioning, arrows.meta, shapes.geometric, fit, backgrounds
+% Architecture reference: Daoud et al., Future Generation Computer Systems 185 (2026) 108700.
+%
+% Source of every number in Section "Results":
+%   scenario/logs/20261015T121211Z.md  (single run, 2026-10-15)
+%   evidence/10-retrain-issue-7-train.png (accuracy and F1 of issue-7)
+%   PROGRESS.md (test counts, cluster description)
+% Nothing in this file is estimated. If a new scenario run replaces the log,
+% every value in Table~\ref{tab:poc-results} and the timings must be re-read from the new log.
+%
+% Checked against the paper (FGCS 185, 108700): component names follow Fig. 6 and Table 9;
+% Fig. 3 of the paper is the SLR process, so "Figure 3" in task.md is not the architecture figure.
+%
+% To confirm before submission:
+%   (1) the labels sec:poc, fig:poc-architecture, tab:poc-mapping, tab:poc-results do not clash
+%       with labels in the main report;
+%   (2) \papercite below matches the way the main report cites the paper.
+% =====================================================================
+
+% Reference to the paper under study (same definition as in scoring_section.tex).
+% Person C: replace with \cite{<bib key of Daoud et al. 2026>} if needed.
+\providecommand{\papercite}{[1]}
+
+\section{Proof of Concept: A Scaled-Down SkeltyMLOps}
+\label{sec:poc}
+
+\subsection{Goal and Scope}
+
+Daoud et al.~\papercite{} support SkeltyMLOps only with one illustrative ticket lifecycle (Section~5.9 of the paper). Their coverage analysis scores five baseline architectures but not SkeltyMLOps, and the architecture has not been instantiated in a production setting (Sections~5.9 and~5.11); an implementation that orchestrates tools such as MLflow and DVC is reported as ongoing. To check whether its central idea can actually be executed, the group built a small Proof of Concept (PoC) and ran it on a small Kubernetes cluster. The central idea tested is the \emph{feedback loop mediated by a ticket}: a monitoring component detects data drift and raises a ticket, an orchestration component reads the ticket and re-runs the training pipeline, and the serving component loads the new model.
+
+The PoC is deliberately narrow. It answers one question only: \emph{can the drift $\rightarrow$ ticket $\rightarrow$ retrain $\rightarrow$ reload loop run end to end without a manual step, using off-the-shelf tools?} It does not evaluate model quality, scalability, security, cost or the usability of the coordination contracts described in the paper. It is a PoC and must not be read as a production system.
+
+\subsection{Mapping Paper Components to the Implementation}
+
+Table~\ref{tab:poc-mapping} maps the components of the SkeltyMLOps architecture (Fig.~6 and Table~9 of~\papercite{}) to what the group implemented. The \emph{Level} column has three values: \emph{Full} (the capability is implemented with a real tool on the real cluster), \emph{Simplified} (implemented, but with fewer features than in the paper or with several components merged), and \emph{Simulated} (replaced by a stand-in that imitates the behaviour).
+
+{\small
+\setlength{\tabcolsep}{4pt}
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{3.7cm} >{\raggedright\arraybackslash}p{6.6cm} >{\raggedright\arraybackslash}p{1.9cm}@{}}
+\caption{Mapping from the SkeltyMLOps components to the PoC implementation.}
+\label{tab:poc-mapping}\\
+\toprule
+Paper component & PoC implementation & Level \\
+\midrule
+\endfirsthead
+\toprule
+Paper component & PoC implementation & Level \\
+\midrule
+\endhead
+\midrule
+\multicolumn{3}{r}{\footnotesize Continued on next page}\\
+\endfoot
+\bottomrule
+\endlastfoot
+
+Data Acquisition & \texttt{acquire.py} generates a synthetic tabular data set (6 numeric features, binary label, 1000 samples, fixed seed 42). The \texttt{shift} parameter moves every feature by \texttt{shift} standard deviations to imitate drift. & Simulated \\
+Data Processing \& Feature Engineering & \texttt{process.py} makes a stratified 80/20 train/test split and writes the reference statistics (mean and standard deviation of each feature) used later for drift detection. No feature transformation. & Simplified \\
+Data, Feature and Model Storage \& Versioning & Plain files on one NFS-backed PersistentVolumeClaim: \texttt{raw/}, \texttt{features/} and \texttt{models/} directories, one sub-directory per \texttt{run-id}. Each \texttt{manifest.json} stores SHA-256 hashes of the raw, train and test data and of the model; a \texttt{LATEST} file points to the active model. The three storage components of the paper are merged into one; MLflow and DVC are not used. & Simplified \\
+Code Storage \& Versioning & A Git repository; each pipeline step runs from a container image with a fixed tag (\texttt{skelty-poc:0.1}). Code is not hashed per run. & Simplified \\
+Model Development \& Training & \texttt{train.py} fits a scikit-learn logistic regression and writes \texttt{model.joblib}, \texttt{metrics.json} (accuracy, F1) and \texttt{manifest.json}. & Simplified \\
+API Development & A FastAPI service with \texttt{/predict}, \texttt{/model}, \texttt{/reload}, \texttt{/stats}, \texttt{/health} and \texttt{/metrics}. \texttt{/stats} returns the mean and standard deviation of the last 200 valid requests. & Simplified \\
+Deployment \& Monitoring & A CronJob (every 5 minutes) compares \texttt{/stats} with the reference statistics and pushes three metrics (\texttt{drift\_detected}, \texttt{drifted\_feature\_count}, \texttt{max\_feature\_zscore}) to a Pushgateway; Prometheus and Grafana display them. Only input drift is monitored. & Simplified \\
+Project Management (Plan package): tickets & GitHub Issues with the labels \texttt{retrain}, \texttt{in-progress} and \texttt{done}. The issue body carries a JSON block with the drift description. & Simplified \\
+MLOps Process Orchestration (MPO): Execute Pipelines & An Argo Workflows \texttt{WorkflowTemplate} runs \texttt{acquire}, \texttt{process} and \texttt{train} in sequence. & Full \\
+MPO: Trigger Retraining & A Python service that polls GitHub every 30 seconds, creates one Argo Workflow per issue, waits for the result, calls \texttt{/reload}, comments on and closes the issue. It does not use BPMN and has no explicit coordination contracts. & Simplified \\
+Actors and human hand-offs & Not modelled. The monitor and the orchestrator act through one GitHub account; no human approval step exists. & Simulated \\
+\end{longtable}
+}
+
+\subsection{PoC Architecture}
+
+Figure~\ref{fig:poc-architecture} shows the components and their interfaces. All pods run in the \texttt{argo} namespace and share one ReadWriteOnce PersistentVolumeClaim.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  font=\scriptsize,
+  box/.style={draw, rounded corners=2pt, align=center, minimum width=2.8cm, minimum height=1.0cm, fill=white},
+  store/.style={draw, cylinder, shape border rotate=90, aspect=0.25, align=center, minimum width=2.8cm, minimum height=1.1cm, fill=white},
+  ext/.style={draw, dashed, rounded corners=2pt, align=center, minimum width=2.8cm, minimum height=1.0cm, fill=white},
+  flow/.style={-{Stealth[length=1.8mm]}, thick},
+  lab/.style={font=\tiny, fill=white, inner sep=1pt, align=center}
+]
+% grid: columns x = 0, 4.4, 8.8 ; rows y = 2.5, 0, -2.5, -5
+\node[ext]   (client) at (0,0)      {Client\\(traffic generator)};
+\node[box]   (serving) at (4.4,0)   {\textbf{Serving}\\FastAPI, \texttt{skelty-serving}};
+\node[box]   (drift) at (8.8,0)     {\textbf{Drift monitor}\\CronJob, every 5 min};
+\node[box]   (mon) at (6.6,2.6)     {Pushgateway,\\Prometheus, Grafana};
+\node[ext]   (issue) at (8.8,-2.6)  {Ticket\\GitHub Issue \texttt{[drift]}};
+\node[box]   (orch) at (4.4,-2.6)   {\textbf{Orchestrator}\\polls every 30 s};
+\node[store] (store) at (0,-2.6)    {Artifact store\\(NFS PVC)};
+\node[box]   (argo) at (0,-5.2)     {\textbf{Argo Workflow}\\acquire $\rightarrow$ process $\rightarrow$ train};
+
+\draw[flow] (client) -- node[lab, above] {\texttt{POST /predict}} (serving);
+\draw[flow] (drift) -- node[lab, above] {\texttt{GET /stats},\\\texttt{GET /model}} (serving);
+\draw[flow] (serving) -- node[lab, left, pos=0.45] {\texttt{/metrics}} (mon);
+\draw[flow] (drift) -- node[lab, right, pos=0.45] {push} (mon);
+\draw[flow] (drift) -- node[lab, right] {creates} (issue);
+\draw[flow] (orch) -- node[lab, above] {polls, relabels,\\closes} (issue);
+\draw[flow] (orch) -- node[lab, right] {\texttt{POST /reload}} (serving);
+\draw[flow] (orch) -- node[lab, below, sloped, pos=0.5] {creates Workflow} (argo);
+\draw[flow] (argo) -- node[lab, left] {writes} (store);
+\draw[flow, dashed] (store) -- node[lab, sloped, above, pos=0.5] {reads model} (serving);
+\end{tikzpicture}
+\caption{Architecture of the PoC. Solid arrows are calls or writes; the dashed arrow is the serving pod reading the new model from the shared volume after \texttt{/reload}. The drift monitor and the orchestrator also read \texttt{reference\_stats.json} and \texttt{metrics.json} from the same volume (not drawn).}
+\label{fig:poc-architecture}
+\end{figure}
+
+The feedback loop proceeds as follows.
+\begin{enumerate}
+  \item Clients send requests to \texttt{/predict}; the serving pod keeps the mean and standard deviation of the last 200 valid requests.
+  \item Every 5 minutes the CronJob computes, for each feature, $z = |\mu_{\text{now}} - \mu_{\text{ref}}| / \sigma_{\text{ref}}$ against the reference statistics of the model currently served. \textbf{Drift is declared when at least 3 features have $z > 1.0$ and the window holds at least 100 samples.}
+  \item If drift is declared and no issue with the label \texttt{retrain} is open, the CronJob creates an issue whose title starts with \texttt{[drift]} and whose body contains a JSON block (\texttt{type}, \texttt{model\_version}, \texttt{drifted\_features}, \texttt{detected\_at}).
+  \item The orchestrator adds the label \texttt{in-progress}, creates a Workflow named \texttt{retrain-issue-<number>} (so a restart cannot create a second one), and waits for it to finish with a 900-second timeout. Its default \texttt{shift} is 1.5, so the retrained model is fitted to the shifted data.
+  \item On success it calls \texttt{/reload}, comments with the accuracy and F1 read from \texttt{metrics.json}, adds \texttt{done} and closes the issue. On failure or timeout it comments, removes \texttt{in-progress} and leaves the issue open.
+  \item \texttt{/reload} also clears the statistics window, so after a retrain at least 100 new samples must be collected before drift can be reported again; this prevents an endless loop of tickets.
+\end{enumerate}
+
+\subsection{Experimental Environment}
+
+The PoC ran on a Kubernetes v1.30.14 cluster with three nodes (one control plane and two workers, containerd runtime) in a home laboratory. The control-plane node has 3.8~GiB of RAM and 3 CPU cores. Argo Workflows v4.1.5 was installed with Helm; Prometheus and Grafana come from an existing kube-prometheus-stack, and a Pushgateway was added for the short-lived CronJob. Artifacts are stored on an NFS export through a manually created PersistentVolume. There is no image registry: images were built on one machine and imported into every node. The data are synthetic and the model is a logistic regression.
+
+\subsection{Verification Scenario}
+
+The scenario script \texttt{scenario/run\_scenario.py} runs five steps in order and records for each step the expectation, the observed result and a pass/fail mark. A step that fails is recorded as failed and is never skipped or edited. The parameters were 200 requests per batch and a shift of 1.5 standard deviations.
+
+\begin{enumerate}
+  \item \textbf{Baseline.} Run the Workflow with \texttt{run-id} \texttt{baseline-001} and \texttt{shift} 0, wait for it to succeed, call \texttt{/reload} and check that \texttt{/model} reports \texttt{baseline-001}.
+  \item \textbf{No drift on original data.} Send 200 requests drawn from the original distribution and check that \texttt{/stats} shows $n \ge 100$ and that the drift rule is not satisfied.
+  \item \textbf{Drift detection.} Send 200 requests shifted by 1.5 standard deviations and wait until the drift rule is satisfied and an issue labelled \texttt{retrain} appears.
+  \item \textbf{Automatic retraining.} Wait until the orchestrator closes the issue with the label \texttt{done} and \texttt{/model} reports \texttt{issue-<number>}.
+  \item \textbf{No drift after retraining.} Send 200 shifted requests again and check that, against the reference statistics of the new model, the drift rule is not satisfied.
+\end{enumerate}
+
+\subsection{Results}
+
+The results below come from one run of the scenario on 2026-10-15 (12:06:20Z to 12:12:11Z, about 5 minutes 51 seconds). Table~\ref{tab:poc-results} is copied from the log file \texttt{scenario/logs/20261015T121211Z.md}; times are UTC.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Results of the five-step scenario. Source: \texttt{scenario/logs/20261015T121211Z.md}. $z_{\max}$ is the largest per-feature $z$ value printed in the log for that step.}
+\label{tab:poc-results}
+\begin{tabular}{@{}>{\centering\arraybackslash}p{0.8cm} >{\raggedright\arraybackslash}p{4.4cm} >{\raggedright\arraybackslash}p{6.4cm} >{\centering\arraybackslash}p{1.2cm}@{}}
+\toprule
+Step & Expected & Observed (from the log) & Result \\
+\midrule
+1 & Workflow \emph{Succeeded}; \texttt{/model.run\_id} is \texttt{baseline-001} & Workflow \texttt{baseline-001} \emph{Succeeded} at 12:07:32Z; \texttt{/reload} changed the model from \texttt{issue-6} to \texttt{baseline-001} & Pass \\
+2 & $n \ge 100$ and no drift & $n = 200$; no feature above the threshold; $z_{\max} = 0.18$ (feature \texttt{f3}) & Pass \\
+3 & Drift visible in \texttt{/stats}; a \texttt{[drift]} issue with label \texttt{retrain} appears & Shifted batch sent at 12:07:53Z; all 6 features drifted; issue \#7 created at 12:10:34Z & Pass \\
+4 & Issue closed with label \texttt{done}; \texttt{/model.run\_id} is \texttt{issue-<number>} & Issue \#7 closed at 12:12:01Z with labels \texttt{retrain} and \texttt{done}; \texttt{/model.run\_id} is \texttt{issue-7} & Pass \\
+5 & $n \ge 100$ and no drift against the new reference & Model \texttt{issue-7}; $n = 200$; no feature above the threshold; $z_{\max} = 0.13$ (feature \texttt{f0}) & Pass \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Latency of the loop.} From the log timestamps, the issue was created 2 minutes 41 seconds after the shifted batch was sent, and the issue was closed 1 minute 27 seconds after it was created. The loop from the shifted batch (12:07:53Z) to a closed issue and a reloaded model (12:12:01Z) therefore took about 4 minutes 8 seconds in this run; step~5 confirmed the absence of drift at 12:12:11Z, 4 minutes 18 seconds after the batch. The first part is dominated by the 5-minute period of the CronJob, whose position relative to the batch is a matter of chance; the figure is a single observation and not an average.
+
+\paragraph{Retrained model.} The \texttt{train} step of Workflow \texttt{retrain-issue-7} reported accuracy 0.9150 and F1 0.9163 (Argo UI log, \texttt{evidence/10-retrain-issue-7-train.png}); the project notes record the same two values for \texttt{baseline-001}. The values are identical because the synthetic data are generated with the same seed and the shift translates the whole data set, so the classification problem is only moved; what changes is the decision boundary and the reference statistics. \textbf{Accuracy is therefore not evidence that retraining took place.} The evidence is the new \texttt{run-id} (\texttt{issue-7}), the \texttt{shift=1.5} value written in the log of the \texttt{acquire} step, and the disappearance of drift in step~5.
+
+\paragraph{Other observations.} Five issues (\#3 to \#7) were processed by the orchestrator during development and testing, and all were closed; issues \#5 and \#7 were created by the monitor, the others by hand to test the orchestrator. The Grafana dashboard (\texttt{evidence/16}, \texttt{evidence/17}) shows the model version, the number of predictions and the drift metrics returning to near zero after each retrain. The orchestrator log recorded four polling failures caused by a dropped connection to GitHub; the loop recovered each time and the cause was not determined.
+
+\paragraph{Unit tests.} The pipeline, serving, monitoring, orchestrator and scenario code have 68 pytest tests in total (16, 10, 24, 12 and 6 respectively), all passing on a Windows machine with Python 3.12.8. The serving, monitoring, orchestrator and scenario tests use fake services, so they do not replace the cluster run above.
+
+\subsection{Differences from the Paper and Limitations}
+
+\begin{itemize}
+  \item \textbf{Scale and data.} The PoC uses a small synthetic tabular data set, a single simple model and one small cluster. Drift is simulated by shifting the distribution, not observed in real traffic. Nothing here shows how the approach behaves with real data, large models or many pipelines.
+  \item \textbf{Orchestration.} The orchestrator is a Python polling loop, not a BPMN-driven engine, and the coordination contracts of the paper are not modelled. The group therefore tested the ticket-driven loop, not the contract mechanism that the paper presents as its main contribution.
+  \item \textbf{Ticket lifecycle.} In the paper's scenario (Section~5.9) a Product Owner approves retraining, and the ticket is handed off in turn to the Data, Model, Software and Ops modules, with named artifacts (a new dataset version, a new model version) and a code update of the serving endpoint. In the PoC a single automated Workflow replaces the Data and Model handoffs, no human approves the ticket, and there is no Software handoff because the API does not change.
+  \item \textbf{Storage and versioning.} Files on an NFS volume with SHA-256 hashes replace MLflow and DVC, and the data, feature and model storage components are merged. Code is versioned only through Git and image tags.
+  \item \textbf{Monitoring.} Only input drift is detected. There are no true labels at run time, so model accuracy in production is not measured. The statistics window lives in the memory of one pod and is lost when the pod restarts. Pushgateway keeps the last pushed value, so the metrics stay frozen if the CronJob stops.
+  \item \textbf{Detection delay.} The window holds the last 200 requests, so drift is not reported as soon as the data begin to change: a local measurement (not on the cluster) with 60 shifted requests mixed with 140 original ones gave $z$ values of only 0.3 to 0.6. With a shift of 1.5 standard deviations, roughly more than 134 of the 200 requests must be shifted before the threshold is exceeded.
+  \item \textbf{Actors and access.} The monitor and the orchestrator call GitHub with the token of one personal account, so a human action cannot be told apart from an automatic one in the GitHub history. No human approval step exists before retraining.
+  \item \textbf{Single run.} The scenario was run once. There is no repetition, no variance and no measurement of failure cases on the cluster (for example, a failing Workflow); these cases are covered only by the unit tests with fake services.
+  \item \textbf{Infrastructure.} The control-plane node was short of memory on 2026-10-13 (the API server used about 2.3 to 2.5~GB of 3.8~GB), around the time Argo Workflows was installed. The root cause was not established and a link to that installation is only suspected, and memory use during the scenario run was not recorded.
+\end{itemize}
+
+\subsection{Conclusion}
+
+In this single run on a small cluster, the ticket-driven loop worked from drift detection to a reloaded model without a manual step, and all five scenario steps passed. This supports a narrow claim: the loop described in Section~5.9 of the paper can be implemented with Argo Workflows, a small drift check and an issue tracker. It does not show that the full SkeltyMLOps architecture, in particular its coordination contracts and BPMN-based orchestration, works as the paper describes, nor that it scales or improves model quality. These questions remain open and would need real data, repeated runs and a closer implementation of the orchestrator.
