@@ -1,0 +1,193 @@
+% =====================================================================
+% poc_section.tex  --  new section "Proof-of-Concept Instantiation"
+% Paste before the Conclusion, after the section of Improvement 1, or \input{poc_section}.
+%
+% Packages needed in the preamble (most are probably already loaded):
+%   \usepackage{booktabs, tabularx, array, graphicx, tikz}
+%   \usetikzlibrary{positioning}
+% Figures to upload next to the .tex (folder "figures/"):
+%   figures/poc-grafana-6h.png, figures/poc-issue7-auto.png, figures/poc-argo-retrain7.png
+% NOT compiled by the author of this file: check for warnings after pasting.
+% =====================================================================
+
+\section{Improvement 2: Proof-of-Concept Instantiation}
+\label{sec:poc}
+
+This section is our own addition and is not part of the paper under study.
+Among the residual gaps listed by the authors is that the architecture ``has not been instantiated in a production setting''; their data-drift walkthrough (\S5.9 of the paper) is only illustrative, which is point W6 of our assessment.
+To probe this gap, we built a deliberately reduced instantiation of that scenario on a small Kubernetes cluster and ran it end to end.
+We call it a proof of concept (PoC): it uses synthetic data, a single user and a three-node cluster, so it shows that the drift-triggered loop \emph{can be assembled} from off-the-shelf tools, not that SkeltyMLOps works in production.
+
+\subsection{Objective and scope}
+
+The PoC instantiates the part of the paper's drift-response lifecycle that can be automated: a runtime event (drift) becomes a ticket, the orchestrator turns the ticket into a retraining run, the new model is deployed, and the ticket is closed with its outcome.
+Phase~1 of the paper (literature review and human--LLM consolidation, Methods A--C) is outside the scope of the PoC; only the architecture produced by Method~D is concerned.
+We do \emph{not} implement coordination contracts, human gates or multi-actor handoffs (Section~\ref{sec:poc-diff}); consequently the PoC says little about the paper's central claim on coordination.
+
+\subsection{Setup}
+
+\begin{itemize}
+  \item \textbf{Platform:} Kubernetes v1.30.14 with three nodes (one control-plane, two workers); artefacts stored on an NFS volume shared by all pods.
+  \item \textbf{Pipeline execution:} Argo Workflows v4.1.5 runs a three-step workflow (\texttt{acquire}, \texttt{process}, \texttt{train}) from a workflow template; each step is a container.
+  \item \textbf{Tickets:} GitHub Issues in a private repository, using the labels \texttt{retrain}, \texttt{in-progress} and \texttt{done}.
+  \item \textbf{Monitoring:} Prometheus, Grafana and a Pushgateway (kube-prometheus-stack already available on the cluster).
+  \item \textbf{Data and model:} synthetic tabular data (1\,000 samples, six numerical features, binary label, 800/200 train/test split) and a scikit-learn logistic regression.
+  \item \textbf{Serving:} a FastAPI service exposing \texttt{/predict}, \texttt{/stats}, \texttt{/reload}, \texttt{/model} and \texttt{/metrics}.
+\end{itemize}
+
+\subsection{Mapping to the components of SkeltyMLOps}
+
+Table~\ref{tab:poc-mapping} maps the components of Table~9 and Fig.~6 of the paper to their PoC realisation. \emph{Reduced} means that a working but simplified version exists; \emph{Simulated} means that a stand-in produces the artefact; \emph{Not implemented} means that the PoC has nothing equivalent.
+
+\begin{table}[t]
+\centering
+\caption{Components of the paper (Table~9, Fig.~6) and their realisation in the PoC.}
+\label{tab:poc-mapping}
+\small
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.6cm} X >{\raggedright\arraybackslash}p{2.6cm}@{}}
+\toprule
+Component (paper) & PoC realisation & Level \\
+\midrule
+Project Management & GitHub Issues and labels as tickets; no prioritisation, assignment or requirements capture & Reduced \\
+MLOps Process Orchestrator (MPO) & Python service that polls the tickets, creates the Argo workflow, waits for it, reloads the API and closes the ticket; one fixed flow, no BPMN, no human gates & Reduced \\
+Data Acquisition & \texttt{acquire.py}: generates synthetic data, optionally shifted & Simulated \\
+Data Processing \& Feature Engineering & \texttt{process.py}: train/test split and reference statistics (mean, standard deviation per feature); no feature engineering or labelling & Reduced \\
+Model Development \& Training & \texttt{train.py}: logistic regression, accuracy and F1 on the test split & Reduced \\
+API Development & FastAPI serving the latest model; container built by hand & Reduced \\
+Deployment \& Monitoring & Kubernetes deployment, \texttt{/metrics}, drift monitor (CronJob), Prometheus and Grafana; no CI/CD, no staging & Reduced \\
+Data, Feature and Model Storage \& Versioning & Files on NFS organised by run identifier; \texttt{manifest.json} with SHA-256 of raw data, splits and model; no MLflow or DVC & Reduced \\
+Code Storage \& Versioning & Git repository (design time only) & Reduced \\
+Event \texttt{DRIFT\_DETECTED} & The monitor creates the ticket directly instead of emitting an event to the MPO & Reduced \\
+Coordination contract (\texttt{drift-response-v1}) & Implicit in the orchestrator code and in the JSON schema of the ticket body; not versioned & Not implemented \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Architecture of the PoC}
+
+Figure~\ref{fig:poc-arch} shows the PoC. The drift monitor is a short-lived job; it pushes its metrics to a Pushgateway because Prometheus cannot scrape a job that lives a few seconds.
+
+\begin{figure}[t]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+  box/.style={draw, rounded corners, align=center, minimum height=0.95cm, minimum width=3cm, font=\footnotesize},
+  store/.style={box, fill=gray!15},
+  ext/.style={box, dashed},
+  lbl/.style={font=\scriptsize, align=center}
+]
+\node[ext]   (client) at (-4.8,0)  {Client\\(simulated)};
+\node[box]   (api)    at (0,0)     {Serving API\\(FastAPI)};
+\node[box]   (mon)    at (5,0)     {Drift monitor\\(CronJob, 5\,min)};
+\node[store] (tix)    at (10,0)    {Tickets\\(GitHub Issues)};
+\node[ext]   (obs)    at (-4.8,-3) {Prometheus,\\Grafana};
+\node[store] (art)    at (0,-3)    {Artefact store\\(NFS, by run id)};
+\node[box]   (wf)     at (5,-3)    {Argo workflow\\acquire$\to$process$\to$train};
+\node[box]   (orch)   at (10,-3)   {Orchestrator\\(polls every 30\,s)};
+
+\draw[-latex] (client) -- node[above, lbl]{\texttt{POST /predict}} (api);
+\draw[-latex] (mon)    -- node[above, lbl]{\texttt{GET /stats}} (api);
+\draw[-latex] (mon)    -- node[above, lbl]{create ticket} (tix);
+\draw[latex-latex] (tix) -- node[right, lbl]{poll,\\update} (orch);
+\draw[-latex] (orch)   -- node[above, lbl]{create\\workflow} (wf);
+\draw[-latex] (wf)     -- node[above, lbl]{write\\artefacts} (art);
+\draw[-latex] (art)    -- node[left, lbl]{load model} (api);
+\draw[-latex, dashed] (orch.north west) -- node[above, sloped, lbl]{\texttt{POST /reload}} (api.south east);
+\draw[-latex] (api)    -- node[above, sloped, lbl]{scrape \texttt{/metrics}} (obs);
+\end{tikzpicture}}
+\caption{Architecture of the PoC. The monitor also reads the reference statistics from the artefact store and pushes its metrics to a Pushgateway (not drawn).}
+\label{fig:poc-arch}
+\end{figure}
+
+\subsection{Experimental scenario}
+
+The scenario script runs five steps against the live cluster and logs each of them with a timestamp:
+(1)~run the baseline workflow (run identifier \texttt{baseline-001}, no shift) and reload the API;
+(2)~send 200 \texttt{/predict} requests drawn from the reference distribution and check that no drift is reported;
+(3)~send 200 requests whose six features are shifted by 1.5 reference standard deviations and wait for the monitor to create a ticket;
+(4)~wait for the orchestrator to retrain, close the ticket and for the API to serve the new model;
+(5)~send the shifted data again and check that the new model's reference no longer reports drift.
+
+The drift rule follows the paper's idea of a runtime check, with parameters we chose: for each feature, $z = |\bar{x}_{\text{now}} - \mu_{\text{ref}}| / \sigma_{\text{ref}}$, where $\bar{x}_{\text{now}}$ is the mean over the last 200 requests; drift is declared when at least three features have $z > 1.0$ and the window holds at least 100 requests.
+The monitor runs every five minutes and the orchestrator polls the tickets every 30 seconds.
+Retraining uses a shift of 1.5 standard deviations, so the new reference matches the shifted data.
+
+\subsection{Results}
+
+Table~\ref{tab:poc-results} reports the run; every value can be traced to the log file \texttt{scenario/logs/20261015T121211Z.md} (start 12:06:20Z, end 12:12:11Z, total 5\,min\,51\,s). All five steps passed.
+
+\begin{table}[t]
+\centering
+\caption{Result of the end-to-end run (source: \texttt{scenario/logs/20261015T121211Z.md}).}
+\label{tab:poc-results}
+\small
+\begin{tabularx}{\textwidth}{@{}c >{\raggedright\arraybackslash}p{4.2cm} X l@{}}
+\toprule
+Step & Expectation & Observation & Outcome \\
+\midrule
+1 & Baseline workflow succeeds; served model is \texttt{baseline-001} & Workflow succeeded; \texttt{/reload} switched \texttt{issue-6} to \texttt{baseline-001} & Pass \\
+2 & $n \geq 100$ and no drift & $n = 200$; largest $z = 0.18$; no feature above 1.0 & Pass \\
+3 & \texttt{/stats} shows drift; a \texttt{[drift]} ticket appears & All six features drifted; ticket \#7 created at 12:10:34Z & Pass \\
+4 & Ticket closed with label \texttt{done}; served model is \texttt{issue-}\emph{n} & Ticket \#7 closed at 12:12:01Z with labels \texttt{retrain}, \texttt{done}; served model \texttt{issue-7} & Pass \\
+5 & No drift against the new model's reference & Model \texttt{issue-7}; $n = 200$; largest $z = 0.13$; no feature above 1.0 & Pass \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\paragraph{Timings.}
+The shifted requests were sent at 12:07:53Z. The monitor created ticket \#7 at 12:10:34Z (2\,min\,41\,s later, bounded by the five-minute schedule), and the ticket was closed with the new model serving at 12:12:01Z (1\,min\,27\,s after creation). From shifted data to new model took 4\,min\,8\,s.
+Across the whole experiment, five ticket-triggered retraining workflows (tickets \#3 to \#7) succeeded, each in 60 to 81 seconds; tickets \#5 and \#7 were created automatically by the monitor, tickets \#3, \#4 and \#6 by hand to test the orchestrator.
+
+\paragraph{Drift evidence.}
+At detection, the per-feature $z$ values written in ticket \#7 were 1.44, 1.58, 1.45, 1.46, 1.61 and 1.35 for features \texttt{f0} to \texttt{f5}. After the retraining, the same shifted data gave $z \leq 0.13$ (Table~\ref{tab:poc-results}, step~5). Figure~\ref{fig:poc-grafana} shows the corresponding Grafana dashboard: two drift episodes (largest $z$ about 2.1 and 1.6, six features above the threshold) followed by a return close to zero. Figure~\ref{fig:poc-issue} shows ticket \#7 and Fig.~\ref{fig:poc-argo} the retraining workflow.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/poc-grafana-6h.png}
+\caption{Grafana dashboard over six hours. Top row: served model, drift flag, total predictions, number of drifted features. Middle row: predictions per second by model, prediction latency (p50, p95). Bottom row: largest $z$ with the drift threshold 1.0, and number of drifted features with the threshold 3. Panel titles are in Vietnamese.}
+\label{fig:poc-grafana}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.85\textwidth]{figures/poc-issue7-auto.png}
+\caption{Ticket \#7, created by the drift monitor and closed by the orchestrator. The text (in Vietnamese) states that the drift was detected automatically by the monitor and lists the per-feature statistics; the second comment, written by the orchestrator, gives the run identifier, accuracy, F1 and the model version after the reload. The account name shown is that of the access token shared by both components.}
+\label{fig:poc-issue}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.7\textwidth]{figures/poc-argo-retrain7.png}
+\caption{Argo workflow \texttt{retrain-issue-7}: the three steps \texttt{acquire}, \texttt{process} and \texttt{train} completed successfully.}
+\label{fig:poc-argo}
+\end{figure}
+
+Accuracy and F1 were identical for the baseline and the retrained models (0.915 and 0.916). This is a property of our synthetic data, where the shift translates the whole problem, and not evidence that retraining is useless; we therefore use the disappearance of the drift, not the accuracy, as the evidence for the loop.
+
+\subsection{Observations relevant to the paper's design}
+
+\begin{itemize}
+  \item \textbf{Duplicate tickets.} The monitor creates a ticket only if no open ticket labelled \texttt{retrain} exists. Drift persists until the new model is loaded, so without such a rule each five-minute run would open another ticket. This serialises tickets rather than resolving their interaction, a minimal answer to the concurrent-ticket gap that the paper lists.
+  \item \textbf{Actor attribution.} The monitor and the orchestrator used one access token, so GitHub attributes every action to the same account. The timeline shows what happened and when, but not which component acted, whereas the paper's audit trail records the acting actor.
+  \item \textbf{Detection latency.} Latency has two components: the five-minute schedule and the sliding window. In a local test, 60 shifted requests mixed with 140 earlier ones gave $z$ between 0.3 and 0.6, below the threshold; with a shift of 1.5 standard deviations, roughly two thirds of the window must be shifted before the rule fires.
+  \item \textbf{Event versus ticket.} In the paper a component emits an event and the MPO creates the ticket; in the PoC the monitor creates the ticket itself. This removes one hop but also the MPO's role as the single mediator.
+  \item \textbf{Idempotence.} Workflow names derive from the ticket number, so a restarted orchestrator finds the existing workflow instead of creating a second one. This was checked with unit tests using fake clients; we did not restart the orchestrator during the live run.
+  \item \textbf{Infrastructure.} During installation the control-plane node became unresponsive because the Kubernetes API server exhausted the node's 3.8\,GiB of memory. No instability was observed during the final run, but resource usage was not recorded.
+\end{itemize}
+
+\subsection{Differences from the paper and limitations}
+\label{sec:poc-diff}
+
+\begin{itemize}
+  \item \textbf{No coordination contracts.} The ticket flow is hard-coded; there is no BPMN process and no contract versioning.
+  \item \textbf{No human gates.} The plan approval of the paper's scenario (Step~3) is automatic.
+  \item \textbf{Collapsed handoffs.} Dataset update and retraining (Steps~4 and~5) run as one workflow under one actor. Step~6 (code update) is never needed because the feature set is fixed; this corresponds to the ``else'' branch of Algorithm~1, but no gate evaluates the input schema.
+  \item \textbf{Storage and versioning.} Files and SHA-256 hashes replace MLflow and DVC, which the authors say their own implementation orchestrates; run identifiers replace names such as \texttt{dataset-v3} and \texttt{model-v2.1}; the code version is not recorded in the manifests.
+  \item \textbf{Data and model.} Synthetic data and a simple model.
+  \item \textbf{One run.} The scenario was executed once, so no variance is available.
+  \item \textbf{Scale.} One small cluster, no load or failure testing; this is not a production setting.
+\end{itemize}
+
+\subsection{Summary}
+
+The PoC shows that the drift-to-redeployment loop of the paper's scenario can be assembled from off-the-shelf tools and closes in a few minutes on a small cluster, with evidence traceable to a log and to the tickets. It exercises the feedback loop but deliberately omits the coordination contracts, human gates and multi-actor handoffs that distinguish SkeltyMLOps; the claim about coordination therefore remains untested, and the production gap stated by the authors remains open.

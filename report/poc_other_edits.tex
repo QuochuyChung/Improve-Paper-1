@@ -1,0 +1,41 @@
+% =====================================================================
+% poc_other_edits.tex -- small edits elsewhere in the report once
+% the PoC section (poc_section.tex) is added. Each block: where, then the text.
+% =====================================================================
+
+% ---------------------------------------------------------------
+% 1. ABSTRACT -- add one sentence at the end of the abstract
+%    (after "... and find them consistent.")
+% ---------------------------------------------------------------
+We complement the assessment with a proof of concept that instantiates the paper's data-drift scenario on a Kubernetes cluster (Improvement 2) and report one end-to-end run.
+
+% ---------------------------------------------------------------
+% 2. TABLE 2 (Section 1.4, mapping criteria -> sections)
+%    add a row after the "(Additional) Our critical assessment and verification" row
+% ---------------------------------------------------------------
+(Additional) & Improvement 2: proof-of-concept instantiation of the data-drift scenario & \ref{sec:poc} \\
+
+% The section number of the PoC depends on where the section of Improvement 1
+% is placed: use \ref{sec:poc} (never a hard-coded number). The table of contents
+% updates itself when the document is rebuilt.
+
+% ---------------------------------------------------------------
+% 3. SECTION 8.2, weakness W6 ("No empirical validation of the architecture")
+%    append at the end of the paragraph
+% ---------------------------------------------------------------
+Section~\ref{sec:poc} reports a minimal instantiation of the drift scenario; it exercises the feedback loop but not the coordination contracts, human gates or concurrent tickets, so this weakness remains largely open for those mechanisms.
+
+% ---------------------------------------------------------------
+% 4. SECTION 8.3 (Relevance and suggested follow-up)
+%    add to the list of follow-up studies (after item (iii) or as item (v))
+% ---------------------------------------------------------------
+(v) extend the instantiation to include versioned coordination contracts, human gates and several concurrent tickets, and measure the coordination effort they add.
+
+% ---------------------------------------------------------------
+% 5. CONCLUSION (now Section 10) -- replace the last sentence
+%    "Overall, SkeltyMLOps is a well-grounded reference point for collaborative
+%     MLOps, whose practical value still has to be demonstrated through
+%     implementation and industrial evaluation."
+%    with:
+% ---------------------------------------------------------------
+Overall, SkeltyMLOps is a well-grounded reference point for collaborative MLOps. Our proof of concept shows that its drift-triggered retraining loop can be assembled from off-the-shelf tools and completes in a few minutes on a small cluster, but it deliberately omits the coordination contracts and human gates that distinguish the design, so the claim about coordination, and its value in production, still have to be demonstrated through a fuller implementation and an industrial evaluation.

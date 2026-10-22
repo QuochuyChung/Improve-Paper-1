@@ -9,3 +9,28 @@ __pycache__/
 secrets/
 *-secret.yaml
 kubeconfig*
+
+# Môi trường ảo, thư viện tải về
+.venv/
+venv/
+node_modules/
+
+# File nhị phân sinh ra từ file khác (tạo lại được), image export từ docker save
+*.zip
+*.tar
+*.tar.gz
+
+# Rác khi biên dịch LaTeX hoặc mở bằng Word
+*.aux
+*.toc
+*.out
+*.log
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+~$*
+.~lock.*
+
+# Rác của hệ điều hành và trình soạn thảo
+Thumbs.db
+.DS_Store
