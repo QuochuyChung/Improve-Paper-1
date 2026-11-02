@@ -164,6 +164,90 @@ At detection, the per-feature $z$ values written in ticket \#7 were 1.44, 1.58, 
 
 Accuracy and F1 were identical for the baseline and the retrained models (0.915 and 0.916). This is a property of our synthetic data, where the shift translates the whole problem, and not evidence that retraining is useless; we therefore use the disappearance of the drift, not the accuracy, as the evidence for the loop.
 
+\subsection{Reproducing the run and the evidence we keep}\label{sec:poc-repro}
+
+The run can be repeated on the same cluster; the code and manifests are in the repository (directories \texttt{pipeline/}, \texttt{k8s/}, \texttt{monitoring/}, \texttt{orchestrator/}, \texttt{scenario/}). Table~\ref{tab:poc-repro} gives, for each stage, what the command should produce and where the corresponding evidence appears in this report; the commands themselves are in the box below. They are run on the control-plane node, except stage~3, which is run on the NFS server. The GitHub token is read from a Kubernetes Secret and is never written to a file.
+
+\begin{table}[t]
+\centering
+\caption{Stages of the run, expected output and evidence.}
+\label{tab:poc-repro}
+\small
+\begin{tabularx}{\textwidth}{@{}c >{\raggedright\arraybackslash}p{3.0cm} X >{\raggedright\arraybackslash}p{3.2cm}@{}}
+\toprule
+Stage & Action & Expected output & Evidence \
+\midrule
+1 & Check the cluster & Three nodes \texttt{Ready}; serving and orchestrator pods \texttt{Running}; CronJob scheduled every five minutes & Setup, Section~\ref{sec:poc} \
+2 & Run the three-step workflow by hand & Steps \texttt{acquire}, \texttt{process}, \texttt{train} complete; workflow \texttt{Succeeded} in 60--81\,s & Fig.~\ref{fig:poc-argo}, Fig.~\ref{fig:poc-workflows} \
+3 & Inspect the artefacts & \texttt{raw/}, \texttt{features/}, \texttt{models/} directories per run identifier; \texttt{metrics.json} with accuracy 0.915 and F1 0.916 on 200 test samples; SHA-256 hashes in \texttt{manifest.json} & Table~\ref{tab:poc-map}, log excerpt below \
+4 & Run the five-step scenario & Five steps \texttt{Pass}; a Markdown log is written to \texttt{scenario/logs/} & Table~\ref{tab:poc-results}, log excerpt below \
+5 & Run the drift monitor on demand & Per-feature $z$, the drift decision, and a \texttt{[drift]} ticket when the rule fires & Fig.~\ref{fig:poc-monitor}, Fig.~\ref{fig:poc-issue} \
+6 & Open the dashboards & Drift flag and largest $z$ rise above the threshold, then fall after the new model is loaded & Fig.~\ref{fig:poc-grafana} \
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{tcolorbox}[colback=gray!6,colframe=gray!55,boxrule=0.4pt,left=3pt,right=3pt,top=2pt,bottom=2pt,title={\small Commands of the run}]
+\footnotesize
+\begin{verbatim}
+# 1. Check the cluster
+kubectl get nodes
+kubectl -n argo get pods
+kubectl -n argo get cronjob skelty-drift-check
+
+# 2. Run the pipeline by hand (acquire -> process -> train)
+argo submit -n argo --from workflowtemplate/skelty-training-pipeline \
+  -p run-id=baseline-001 -p shift=0 --watch
+kubectl -n argo get workflows
+
+# 3. Inspect the artefacts (on the NFS server)
+ls /data/skelty-artifacts/models/baseline-001
+cat /data/skelty-artifacts/models/baseline-001/metrics.json
+
+# 4. Scenario (needs the serving API on localhost:8000)
+kubectl -n argo port-forward svc/skelty-serving 8000:8000 > /dev/null 2>&1 &
+export GITHUB_TOKEN=$(kubectl -n argo get secret skelty-github \
+  -o jsonpath='{.data.GITHUB_TOKEN}' | base64 -d)
+export GITHUB_REPO=<owner>/<repository>
+python3 scenario/run_scenario.py --dry-run     # prints the plan only
+python3 scenario/run_scenario.py               # runs the five steps
+
+# 5. Drift monitor on demand, and the orchestrator log
+kubectl -n argo create job drift-demo --from=cronjob/skelty-drift-check
+kubectl -n argo logs job/drift-demo
+kubectl -n argo logs deploy/skelty-orchestrator
+\end{verbatim}
+\end{tcolorbox}
+
+\medskip
+\noindent Excerpt of the scenario log (\texttt{scenario/logs/20261015T121211Z.md}, date 2026-10-15 omitted, lines translated from Vietnamese and shortened); the values are those used in Table~\ref{tab:poc-results}:
+
+\begin{tcolorbox}[colback=gray!6,colframe=gray!55,boxrule=0.4pt,left=3pt,right=3pt,top=2pt,bottom=2pt]
+\scriptsize
+\begin{verbatim}
+12:07:32Z workflow baseline-001: Succeeded
+12:07:42Z n=200 z={'f0': 0.12, 'f1': 0.16, 'f2': 0.03, 'f3': 0.18, 'f4': 0.12, 'f5': 0.03}
+12:07:53Z sent 200 /predict requests (shift=1.5); drifted=['f0','f1','f2','f3','f4','f5']
+12:10:34Z issue #7: [drift] baseline-001: 6 features deviate from the reference
+12:12:01Z issue #7 closed, labels=['retrain', 'done']; /model.run_id=issue-7
+12:12:11Z model=issue-7 n=200 z={'f0': 0.13, ... , 'f5': 0.1} drifted=[]
+\end{verbatim}
+\end{tcolorbox}
+
+\begin{figure}[t]
+\centering
+\poctryfig{\textwidth}{figures/poc-monitor-log.png}
+\caption{Output of the drift monitor job that created ticket \#7 (\texttt{kubectl logs}, in Vietnamese): for each feature the current mean, the reference mean and standard deviation and $z$; the decision (six features above 1.0, largest $z$ = 1.61); the push to the Pushgateway; and the creation of the ticket.}
+\label{fig:poc-monitor}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\poctryfig{0.9\textwidth}{figures/poc-workflows.png}
+\caption{Argo workflow list after the experiment: \texttt{retrain-issue-3} to \texttt{retrain-issue-7} all completed 3/3 steps in 60 to 81 seconds, the two \texttt{skelty-training-pipeline-*} runs being manual runs of the template.}
+\label{fig:poc-workflows}
+\end{figure}
+
 \subsection{Observations relevant to the paper's design}
 
 \begin{itemize}
